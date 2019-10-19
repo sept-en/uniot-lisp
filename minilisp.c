@@ -38,7 +38,7 @@ int main()
     define_constants(root, genv);
     define_primitives(root, genv);
 
-    lisp_eval(root, genv, "(+ 1 2) (^ 1 2)");
+    lisp_eval(root, genv, "(define code '(+ 1 2)) (eval '(+ 2 2)) (eval code) (print code) (+ 5 6)");
 
     return 0;
 }

@@ -27,19 +27,28 @@ static int buffer_ungetc(int c)
     return c;
 }
 
-static void buffer_printf(const char *fmt, ...)
+static int printf_to_handler(char* dest, int pos, const char *fmt, ...)
 {
-    char buf[LISP_MSG_BUF];
-    va_list ap;
-    va_start(ap, fmt);
-    int size = vsprintf(buf, fmt, ap);
-    va_end(ap);
+    va_list args;
+    va_start(args, fmt);
+    int size = 0;
 
-    if (print_out)
-        print_out(buf, size);
+    if (dest) {
+        size = pos + vsprintf(dest + pos, fmt, args);
+    } else {
+        char buf[LISP_MSG_BUF];
+        size = vsprintf(buf, fmt, args);
+
+        if (print_out)
+            print_out(buf, size);
+    }
+
+    va_end(args);
+
+    return size;
 }
 
-static void error_buffer_printf(const char *fmt, va_list ap)
+static void printf_error_to_handler(const char *fmt, va_list ap)
 {
     char buf[LISP_MSG_BUF];
     int size = vsprintf(buf, fmt, ap);
@@ -52,7 +61,7 @@ static void error_buffer_printf(const char *fmt, va_list ap)
 void __attribute((noreturn)) error(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    error_buffer_printf(fmt, ap);
+    printf_error_to_handler(fmt, ap);
     va_end(ap);
     longjmp(error_jumper, 1);
 }
@@ -257,7 +266,7 @@ void gc(void *root) {
     size_t old_nused = mem_nused;
     mem_nused = (size_t)((uint8_t *)scan1 - (uint8_t *)memory);
     if (debug_gc)
-        buffer_printf("GC: %zu bytes out of %zu bytes copied.\n", mem_nused, old_nused);
+        printf_to_handler(NULL, 0, "GC: %zu bytes out of %zu bytes copied.\n", mem_nused, old_nused);
     gc_running = false;
 }
 
@@ -446,29 +455,28 @@ Obj *read_expr(void *root) {
 }
 
 // Prints the given object.
-void print(Obj *obj) {
+int print_to_buf(char *buf, int pos, Obj *obj) {
     switch (obj->type) {
     case TCELL:
-        buffer_printf("(");
+        pos = printf_to_handler(buf, pos, "(");
         for (;;) {
-            print(obj->car);
+            pos = print_to_buf(buf, pos, obj->car);
             if (obj->cdr == Nil)
                 break;
             if (obj->cdr->type != TCELL) {
-                buffer_printf(" . ");
-                print(obj->cdr);
+                pos = printf_to_handler(buf, pos, " . ");
+                pos = print_to_buf(buf, pos, obj->cdr);
                 break;
             }
-            buffer_printf(" ");
+            pos = printf_to_handler(buf, pos, " ");
             obj = obj->cdr;
         }
-        buffer_printf(")");
-        return;
+        pos = printf_to_handler(buf, pos, ")");
+        return pos;
 
-#define CASE(type, ...)                         \
-    case type:                                  \
-        buffer_printf(__VA_ARGS__);             \
-        return
+#define CASE(type, ...)                                     \
+    case type:                                              \
+        return printf_to_handler(buf, pos, __VA_ARGS__);
     CASE(TINT, "%d", obj->value);
     CASE(TSYMBOL, "%s", obj->name);
     CASE(TPRIMITIVE, "<primitive>");
@@ -481,6 +489,10 @@ void print(Obj *obj) {
     default:
         error("Bug: print: Unknown tag type: %d", obj->type);
     }
+}
+
+void print(Obj *obj) {
+    print_to_buf(NULL, 0, obj);
 }
 
 // Returns the length of the given list. -1 if it's not a proper list.
@@ -821,12 +833,37 @@ static Obj *prim_macroexpand(void *root, Obj **env, Obj **list) {
     return macroexpand(root, env, body);
 }
 
-// (println expr)
+// (print expr)
 static Obj *prim_print(void *root, Obj **env, Obj **list) {
     DEFINE1(tmp);
     *tmp = (*list)->car;
-    print(eval(root, env, tmp));
+
+    char buf[SYMBOL_MAX_LEN];
+    print_to_buf(buf, 0, eval(root, env, tmp));
+    printf_to_handler(NULL, 0, buf);
     return Nil;
+}
+
+// (eval 'expr)
+static Obj *prim_eval(void *root, Obj **env, Obj **list) {
+    DEFINE2(tmp, expr);
+    *tmp = (*list)->car;
+
+    char buf[SYMBOL_MAX_LEN];
+    print_to_buf(buf, 0, eval(root, env, tmp));
+
+    const char *prev_buf = current_buffer;
+    size_t prev_index = current_index;
+
+    current_buffer = buf;
+    current_index = 0;
+
+    *expr = read_expr(root);
+
+    current_buffer = prev_buf;
+    current_index = prev_index;
+
+    return eval(root, env, expr);
 }
 
 // (if expr expr expr ...)
@@ -920,6 +957,7 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "=", prim_num_eq);
     add_primitive(root, env, "eq", prim_eq);
     add_primitive(root, env, "print", prim_print);
+    add_primitive(root, env, "eval", prim_eval);
 }
 
 //======================================================================
@@ -977,7 +1015,10 @@ bool lisp_eval(void *root, Obj **env, const char *code)
                 error("Stray close parenthesis");
             if (*expr == Dot)
                 error("Stray dot");
-            print(eval(root, env, expr));
+
+            char buf[SYMBOL_MAX_LEN];
+            print_to_buf(buf, 0, eval(root, env, expr));
+            printf_to_handler(NULL, 0, buf);
         }
         else
             return false;
