@@ -151,19 +151,15 @@ Obj *read_expr(void *root);
 
 Obj *eval(void *root, Obj **env, Obj **obj);
 
-bool getEnvFlag(const char *name);
-
-void *alloc_semispace();
-
 struct Obj *make_env(void *root, Obj **vars, Obj **up);
 
 void define_constants(void *root, Obj **env);
 
 void define_primitives(void *root, Obj **env);
 
-void print(Obj *obj);
+int print_to_buf(char *buf, int pos, Obj *obj);
 
-void __attribute((noreturn)) error(const char *fmt, ...);
+void print(Obj *obj);
 
 void add_primitive(void *root, Obj **env, const char *name, Primitive *fn);
 

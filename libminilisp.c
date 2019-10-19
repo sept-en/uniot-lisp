@@ -58,7 +58,7 @@ static void printf_error_to_handler(const char *fmt, va_list ap)
 }
 // TODO: --------------------------------------------------------------------
 
-void __attribute((noreturn)) error(const char *fmt, ...) {
+static void __attribute((noreturn)) error(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     printf_error_to_handler(fmt, ap);
@@ -173,8 +173,8 @@ static Obj *alloc(void *root, int type, size_t size) {
 // to-space. The objects before "scan1" are the objects that are fully copied. The objects between
 // "scan1" and "scan2" have already been copied, but may contain pointers to the from-space. "scan2"
 // points to the beginning of the free space.
-Obj *scan1;
-Obj *scan2;
+static Obj *scan1;
+static Obj *scan2;
 
 // Moves one object from the from-space to the to-space. Returns the object's new address. If the
 // object has already been moved, does nothing but just returns the new address.
@@ -202,7 +202,7 @@ static inline Obj *forward(Obj *obj) {
     return newloc;
 }
 
-void *alloc_semispace() {
+static void *alloc_semispace() {
     return malloc(MEMORY_SIZE);
 }
 
@@ -328,7 +328,7 @@ static Obj *acons(void *root, Obj **x, Obj **y, Obj **a) {
 // This is a hand-written recursive-descendent parser.
 //======================================================================
 
-const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>";
+static const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>";
 
 static int peek(void) {
     int c = buffer_getchar();
@@ -412,7 +412,7 @@ static int read_number(int val) {
     return val;
 }
 
-Obj *read_symbol(void *root, char c) {
+static Obj *read_symbol(void *root, char c) {
     char buf[SYMBOL_MAX_LEN + 1];
     buf[0] = c;
     int len = 1;
@@ -846,23 +846,11 @@ static Obj *prim_print(void *root, Obj **env, Obj **list) {
 
 // (eval 'expr)
 static Obj *prim_eval(void *root, Obj **env, Obj **list) {
-    DEFINE2(tmp, expr);
-    *tmp = (*list)->car;
-
-    char buf[SYMBOL_MAX_LEN];
-    print_to_buf(buf, 0, eval(root, env, tmp));
-
-    const char *prev_buf = current_buffer;
-    size_t prev_index = current_index;
-
-    current_buffer = buf;
-    current_index = 0;
-
-    *expr = read_expr(root);
-
-    current_buffer = prev_buf;
-    current_index = prev_index;
-
+    if (length(*list) != 1)
+        error("Malformed eval");
+    DEFINE2(quote, expr);
+    *quote = (*list)->car;
+    *expr = eval(root, env, quote);
     return eval(root, env, expr);
 }
 
@@ -963,12 +951,6 @@ void define_primitives(void *root, Obj **env) {
 //======================================================================
 // Entry point
 //======================================================================
-
-// Returns true if the environment variable is defined and not the empty string.
-bool getEnvFlag(const char *name) {
-    char *val = getenv(name);
-    return val && val[0];
-}
 
 void lisp_create(size_t size)
 {
