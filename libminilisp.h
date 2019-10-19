@@ -1,42 +1,41 @@
 #ifndef MINILISP_H
 #define MINILISP_H
 
-// The size of the heap in byte
-#define MEMORY_SIZE 65536
+#define LISP_MSG_BUF 100
+
+#define SYMBOL_MAX_LEN 200
 
 #define ROOT_END ((void *)-1)
 
-#define ADD_ROOT(size)                          \
-    void *root_ADD_ROOT_[size + 2];             \
-    root_ADD_ROOT_[0] = root;                   \
-    for (int i = 1; i <= size; i++)             \
-        root_ADD_ROOT_[i] = NULL;               \
-    root_ADD_ROOT_[size + 1] = ROOT_END;        \
+#define ADD_ROOT(size)                   \
+    void *root_ADD_ROOT_[size + 2];      \
+    root_ADD_ROOT_[0] = root;            \
+    for (int i = 1; i <= size; i++)      \
+        root_ADD_ROOT_[i] = NULL;        \
+    root_ADD_ROOT_[size + 1] = ROOT_END; \
     root = root_ADD_ROOT_
 
-#define DEFINE1(var1)                           \
-    ADD_ROOT(1);                                \
+#define DEFINE1(var1) \
+    ADD_ROOT(1);      \
     Obj **var1 = (Obj **)(root_ADD_ROOT_ + 1)
 
-#define DEFINE2(var1, var2)                     \
-    ADD_ROOT(2);                                \
-    Obj **var1 = (Obj **)(root_ADD_ROOT_ + 1);  \
+#define DEFINE2(var1, var2)                    \
+    ADD_ROOT(2);                               \
+    Obj **var1 = (Obj **)(root_ADD_ROOT_ + 1); \
     Obj **var2 = (Obj **)(root_ADD_ROOT_ + 2)
 
-#define DEFINE3(var1, var2, var3)               \
-    ADD_ROOT(3);                                \
-    Obj **var1 = (Obj **)(root_ADD_ROOT_ + 1);  \
-    Obj **var2 = (Obj **)(root_ADD_ROOT_ + 2);  \
+#define DEFINE3(var1, var2, var3)              \
+    ADD_ROOT(3);                               \
+    Obj **var1 = (Obj **)(root_ADD_ROOT_ + 1); \
+    Obj **var2 = (Obj **)(root_ADD_ROOT_ + 2); \
     Obj **var3 = (Obj **)(root_ADD_ROOT_ + 3)
 
-#define DEFINE4(var1, var2, var3, var4)         \
-    ADD_ROOT(4);                                \
-    Obj **var1 = (Obj **)(root_ADD_ROOT_ + 1);  \
-    Obj **var2 = (Obj **)(root_ADD_ROOT_ + 2);  \
-    Obj **var3 = (Obj **)(root_ADD_ROOT_ + 3);  \
+#define DEFINE4(var1, var2, var3, var4)        \
+    ADD_ROOT(4);                               \
+    Obj **var1 = (Obj **)(root_ADD_ROOT_ + 1); \
+    Obj **var2 = (Obj **)(root_ADD_ROOT_ + 2); \
+    Obj **var3 = (Obj **)(root_ADD_ROOT_ + 3); \
     Obj **var4 = (Obj **)(root_ADD_ROOT_ + 4)
-
-#define SYMBOL_MAX_LEN 200
 
 #include <assert.h>
 #include <ctype.h>
@@ -47,14 +46,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 
 //======================================================================
 // Lisp objects
 //======================================================================
 
 // The Lisp object type
-enum {
+enum
+{
     // Regular objects visible from the user
     TINT = 1,
     TCELL,
@@ -79,10 +78,14 @@ struct Obj;
 typedef struct Obj *Primitive(void *root, struct Obj **env, struct Obj **args);
 
 // The object type
-typedef struct Obj {
+typedef struct Obj
+{
     // The first word of the object represents the type of the object. Any code that handles object
     // needs to check its type first, then access the following union members.
-    int type;
+    unsigned char type;
+
+    // It indicates if object is a constant value.
+    unsigned char constant;
 
     // The total size of the object, including "type" field, this field, the contents, and the
     // padding at the end of the object.
@@ -93,7 +96,8 @@ typedef struct Obj {
         // Int
         int value;
         // Cell
-        struct {
+        struct
+        {
             struct Obj *car;
             struct Obj *cdr;
         };
@@ -102,14 +106,16 @@ typedef struct Obj {
         // Primitive
         Primitive *fn;
         // Function or Macro
-        struct {
+        struct
+        {
             struct Obj *params;
             struct Obj *body;
             struct Obj *env;
         };
         // Environment frame. This is a linked list of association lists
         // containing the mapping from symbols to their value.
-        struct {
+        struct
+        {
             struct Obj *vars;
             struct Obj *up;
         };
@@ -118,48 +124,34 @@ typedef struct Obj {
     };
 } Obj;
 
+typedef void (*yield_def)();
+typedef void (*print_def)(const char *msg, int size);
+
+extern yield_def cycle_yield;
+extern print_def print_out;
+extern print_def print_err;
+
 // Constants
 extern Obj *True;
 extern Obj *Nil;
 extern Obj *Dot;
 extern Obj *Cparen;
 
-// The list containing all symbols. Such data structure is traditionally called the "obarray", but I
-// avoid using it as a variable name as this is not an array but a list.
-extern Obj *Symbols;
-
-// The size of the heap in byte
-#define MEMORY_SIZE 65536
-
-// The pointer pointing to the beginning of the current heap
-extern void *memory;
-
-// The pointer pointing to the beginning of the old heap
-extern void *from_space;
-
-// The number of bytes allocated from the heap
-extern size_t mem_nused;
-
 // Flags to debug GC
 extern bool gc_running;
 extern bool debug_gc;
 extern bool always_gc;
 
-void gc(void *root);
+// The size of the heap in byte
+extern size_t MEMORY_SIZE;
 
-// Cheney's algorithm uses two pointers to keep track of GC status. At first both pointers point to
-// the beginning of the to-space. As GC progresses, they are moved towards the end of the
-// to-space. The objects before "scan1" are the objects that are fully copied. The objects between
-// "scan1" and "scan2" have already been copied, but may contain pointers to the from-space. "scan2"
-// points to the beginning of the free space.
-Obj *scan1;
-Obj *scan2;
+void gc(void *root);
 
 Obj *read_expr(void *root);
 
 Obj *eval(void *root, Obj **env, Obj **obj);
 
-bool getEnvFlag(char *name);
+bool getEnvFlag(const char *name);
 
 void *alloc_semispace();
 
@@ -171,6 +163,26 @@ void define_primitives(void *root, Obj **env);
 
 void print(Obj *obj);
 
-void __attribute((noreturn)) error(char *fmt, ...);
+void __attribute((noreturn)) error(const char *fmt, ...);
+
+void add_primitive(void *root, Obj **env, const char *name, Primitive *fn);
+
+void add_constant_int(void *root, Obj **env, const char *name, int value);
+
+Obj *get_variable(void *root, Obj **env, const char *name);
+
+void lisp_create(size_t size);
+
+void lisp_destroy(void);
+
+bool lisp_is_created();
+
+bool lisp_eval(void *root, Obj **env, const char *code);
+
+void lisp_set_cycle_yield(yield_def yield);
+
+void lisp_set_printers(print_def out, print_def err);
+
+size_t lisp_mem_used(void);
 
 #endif

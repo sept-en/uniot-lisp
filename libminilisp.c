@@ -1,37 +1,90 @@
-// This software is in the public domain.
+#include <setjmp.h>
 #include "libminilisp.h"
 
-void __attribute((noreturn)) error(char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
-    va_end(ap);
-    exit(1);
+// TODO: add comments ------------------------------------------------------
+size_t MEMORY_SIZE = 4000; // default value
+
+yield_def cycle_yield = NULL;
+print_def print_out = NULL;
+print_def print_err = NULL;
+
+static jmp_buf error_jumper;
+
+static const char *current_buffer = "";
+static size_t current_index = 0;
+
+static int buffer_getchar() {
+    int r = (int)current_buffer[current_index++];
+    if (r == '\0')
+        r = EOF;
+    return r;
 }
 
+static int buffer_ungetc(int c)
+{
+    if (current_index > 0)
+        current_index--;
+    return c;
+}
+
+static void buffer_printf(const char *fmt, ...)
+{
+    char buf[LISP_MSG_BUF];
+    va_list ap;
+    va_start(ap, fmt);
+    int size = vsprintf(buf, fmt, ap);
+    va_end(ap);
+
+    if (print_out)
+        print_out(buf, size);
+}
+
+static void error_buffer_printf(const char *fmt, va_list ap)
+{
+    char buf[LISP_MSG_BUF];
+    int size = vsprintf(buf, fmt, ap);
+
+    if (print_err)
+        print_err(buf, size);
+}
+// TODO: --------------------------------------------------------------------
+
+void __attribute((noreturn)) error(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    error_buffer_printf(fmt, ap);
+    va_end(ap);
+    longjmp(error_jumper, 1);
+}
+
+static Obj literals[] = {
+    {TTRUE},
+    {TNIL},
+    {TDOT},
+    {TCPAREN}};
+
 // Constants
-Obj *True = &(Obj){ TTRUE };
-Obj *Nil = &(Obj){ TNIL };
-Obj *Dot = &(Obj){ TDOT };
-Obj *Cparen = &(Obj){ TCPAREN };
+Obj *True = &literals[0];
+Obj *Nil = &literals[1];
+Obj *Dot = &literals[2];
+Obj *Cparen = &literals[3];
 
 // The list containing all symbols. Such data structure is traditionally called the "obarray", but I
 // avoid using it as a variable name as this is not an array but a list.
-Obj *Symbols;
+static Obj *Symbols;
 
 //======================================================================
 // Memory management
 //======================================================================
 
 // The pointer pointing to the beginning of the current heap
-void *memory;
+static void *memory = NULL;
 
 // The pointer pointing to the beginning of the old heap
-void *from_space;
+static void *from_space = NULL;
 
 // The number of bytes allocated from the heap
-size_t mem_nused = 0;
+static size_t mem_nused = 0;
 
 // Flags to debug GC
 bool gc_running = false;
@@ -95,9 +148,10 @@ static Obj *alloc(void *root, int type, size_t size) {
         error("Memory exhausted");
 
     // Allocate the object.
-    Obj *obj = memory + mem_nused;
+    Obj *obj = (Obj *)((char *)memory + mem_nused);
     obj->type = type;
     obj->size = size;
+    obj->constant = false;
     mem_nused += size;
     return obj;
 }
@@ -105,6 +159,13 @@ static Obj *alloc(void *root, int type, size_t size) {
 //======================================================================
 // Garbage collector
 //======================================================================
+// Cheney's algorithm uses two pointers to keep track of GC status. At first both pointers point to
+// the beginning of the to-space. As GC progresses, they are moved towards the end of the
+// to-space. The objects before "scan1" are the objects that are fully copied. The objects between
+// "scan1" and "scan2" have already been copied, but may contain pointers to the from-space. "scan2"
+// points to the beginning of the free space.
+Obj *scan1;
+Obj *scan2;
 
 // Moves one object from the from-space to the to-space. Returns the object's new address. If the
 // object has already been moved, does nothing but just returns the new address.
@@ -112,13 +173,13 @@ static inline Obj *forward(Obj *obj) {
     // If the object's address is not in the from-space, the object is not managed by GC nor it
     // has already been moved to the to-space.
     ptrdiff_t offset = (uint8_t *)obj - (uint8_t *)from_space;
-    if (offset < 0 || MEMORY_SIZE <= offset)
+    if (offset < 0 || MEMORY_SIZE <= (size_t)offset)
         return obj;
 
     // The pointer is pointing to the from-space, but the object there was a tombstone. Follow the
     // forwarding pointer to find the new location of the object.
     if (obj->type == TMOVED)
-        return obj->moved;
+        return (Obj *)obj->moved;
 
     // Otherwise, the object has not been moved yet. Move it.
     Obj *newloc = scan2;
@@ -133,16 +194,16 @@ static inline Obj *forward(Obj *obj) {
 }
 
 void *alloc_semispace() {
-    return mmap(NULL, MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    return malloc(MEMORY_SIZE);
 }
 
 // Copies the root objects.
 static void forward_root_objects(void *root) {
     Symbols = forward(Symbols);
-    for (void **frame = root; frame; frame = *(void ***)frame)
+    for (void **frame = (void **)root; frame; frame = *(void ***)frame)
         for (int i = 1; frame[i] != ROOT_END; i++)
             if (frame[i])
-                frame[i] = forward(frame[i]);
+                frame[i] = forward((Obj *)frame[i]);
 }
 
 // Implements Cheney's copying garbage collection algorithm.
@@ -156,7 +217,7 @@ void gc(void *root) {
     memory = alloc_semispace();
 
     // Initialize the two pointers for GC. Initially they point to the beginning of the to-space.
-    scan1 = scan2 = memory;
+    scan1 = scan2 = (Obj *)memory;
 
     // Copy the GC root objects first. This moves the pointer scan2.
     forward_root_objects(root);
@@ -192,11 +253,11 @@ void gc(void *root) {
     }
 
     // Finish up GC.
-    munmap(from_space, MEMORY_SIZE);
+    free(from_space);
     size_t old_nused = mem_nused;
     mem_nused = (size_t)((uint8_t *)scan1 - (uint8_t *)memory);
     if (debug_gc)
-        fprintf(stderr, "GC: %zu bytes out of %zu bytes copied.\n", mem_nused, old_nused);
+        buffer_printf("GC: %zu bytes out of %zu bytes copied.\n", mem_nused, old_nused);
     gc_running = false;
 }
 
@@ -217,7 +278,7 @@ static Obj *cons(void *root, Obj **car, Obj **cdr) {
     return cell;
 }
 
-static Obj *make_symbol(void *root, char *name) {
+static Obj *make_symbol(void *root, const char *name) {
     Obj *sym = alloc(root, TSYMBOL, strlen(name) + 1);
     strcpy(sym->name, name);
     return sym;
@@ -261,8 +322,8 @@ static Obj *acons(void *root, Obj **x, Obj **y, Obj **a) {
 const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>";
 
 static int peek(void) {
-    int c = getchar();
-    ungetc(c, stdin);
+    int c = buffer_getchar();
+    buffer_ungetc(c);
     return c;
 }
 
@@ -281,12 +342,12 @@ static Obj *reverse(Obj *p) {
 // Skips the input until newline is found. Newline is one of \r, \r\n or \n.
 static void skip_line(void) {
     for (;;) {
-        int c = getchar();
+        int c = buffer_getchar();
         if (c == EOF || c == '\n')
             return;
         if (c == '\r') {
             if (peek() == '\n')
-                getchar();
+                buffer_getchar();
             return;
         }
     }
@@ -316,7 +377,7 @@ static Obj *read_list(void *root) {
 
 // May create a new symbol. If there's a symbol with the same name, it will not create a new symbol
 // but return the existing one.
-static Obj *intern(void *root, char *name) {
+static Obj *intern(void *root, const char *name) {
     for (Obj *p = Symbols; p != Nil; p = p->cdr)
         if (strcmp(name, p->car->name) == 0)
             return p->car;
@@ -338,7 +399,7 @@ static Obj *read_quote(void *root) {
 
 static int read_number(int val) {
     while (isdigit(peek()))
-        val = val * 10 + (getchar() - '0');
+        val = val * 10 + (buffer_getchar() - '0');
     return val;
 }
 
@@ -349,7 +410,7 @@ Obj *read_symbol(void *root, char c) {
     while (isalnum(peek()) || strchr(symbol_chars, peek())) {
         if (SYMBOL_MAX_LEN <= len)
             error("Symbol name too long");
-        buf[len++] = getchar();
+        buf[len++] = buffer_getchar();
     }
     buf[len] = '\0';
     return intern(root, buf);
@@ -357,7 +418,7 @@ Obj *read_symbol(void *root, char c) {
 
 Obj *read_expr(void *root) {
     for (;;) {
-        int c = getchar();
+        int c = buffer_getchar();
         if (c == ' ' || c == '\n' || c == '\r' || c == '\t')
             continue;
         if (c == EOF)
@@ -388,25 +449,25 @@ Obj *read_expr(void *root) {
 void print(Obj *obj) {
     switch (obj->type) {
     case TCELL:
-        printf("(");
+        buffer_printf("(");
         for (;;) {
             print(obj->car);
             if (obj->cdr == Nil)
                 break;
             if (obj->cdr->type != TCELL) {
-                printf(" . ");
+                buffer_printf(" . ");
                 print(obj->cdr);
                 break;
             }
-            printf(" ");
+            buffer_printf(" ");
             obj = obj->cdr;
         }
-        printf(")");
+        buffer_printf(")");
         return;
 
 #define CASE(type, ...)                         \
     case type:                                  \
-        printf(__VA_ARGS__);                    \
+        buffer_printf(__VA_ARGS__);             \
         return
     CASE(TINT, "%d", obj->value);
     CASE(TSYMBOL, "%s", obj->name);
@@ -414,7 +475,7 @@ void print(Obj *obj) {
     CASE(TFUNCTION, "<function>");
     CASE(TMACRO, "<macro>");
     CASE(TMOVED, "<moved>");
-    CASE(TTRUE, "t");
+    CASE(TTRUE, "#t");
     CASE(TNIL, "()");
 #undef CASE
     default:
@@ -610,6 +671,8 @@ static Obj *prim_setq(void *root, Obj **env, Obj **list) {
     *bind = find(env, (*list)->car);
     if (!*bind)
         error("Unbound variable %s", (*list)->car->name);
+    if ((*list)->car->constant)
+        error("Cannot change constant %s", (*list)->car->name);
     *value = (*list)->cdr->car;
     *value = eval(root, env, value);
     (*bind)->cdr = *value;
@@ -630,11 +693,17 @@ static Obj *prim_setcar(void *root, Obj **env, Obj **list) {
 static Obj *prim_while(void *root, Obj **env, Obj **list) {
     if (length(*list) < 2)
         error("Malformed while");
-    DEFINE2(cond, exprs);
+    DEFINE3(cond, exprs, itr);
     *cond = (*list)->car;
+    *itr = get_variable(root, env, "#itr");
+    (*itr)->value = 0;
     while (eval(root, env, cond) != Nil) {
         *exprs = (*list)->cdr;
         eval_list(root, env, exprs);
+        (*itr)->value++;
+
+        if (cycle_yield)
+            cycle_yield();
     }
     return Nil;
 }
@@ -707,9 +776,12 @@ static Obj *prim_lambda(void *root, Obj **env, Obj **list) {
 static Obj *handle_defun(void *root, Obj **env, Obj **list, int type) {
     if ((*list)->car->type != TSYMBOL || (*list)->cdr->type != TCELL)
         error("Malformed defun");
-    DEFINE3(fn, sym, rest);
+    DEFINE4(fn, sym, rest, bind);
     *sym = (*list)->car;
     *rest = (*list)->cdr;
+    *bind = find(env, *sym);
+    if (*bind)
+        error("Already defined: %s", (*sym)->name);
     *fn = handle_function(root, env, rest, type);
     add_variable(root, env, sym, fn);
     return *fn;
@@ -724,9 +796,12 @@ static Obj *prim_defun(void *root, Obj **env, Obj **list) {
 static Obj *prim_define(void *root, Obj **env, Obj **list) {
     if (length(*list) != 2 || (*list)->car->type != TSYMBOL)
         error("Malformed define");
-    DEFINE2(sym, value);
+    DEFINE3(sym, value, bind);
     *sym = (*list)->car;
     *value = (*list)->cdr->car;
+    *bind = find(env, *sym);
+    if (*bind)
+        error("Already defined: %s", (*sym)->name);
     *value = eval(root, env, value);
     add_variable(root, env, sym, value);
     return *value;
@@ -747,11 +822,10 @@ static Obj *prim_macroexpand(void *root, Obj **env, Obj **list) {
 }
 
 // (println expr)
-static Obj *prim_println(void *root, Obj **env, Obj **list) {
+static Obj *prim_print(void *root, Obj **env, Obj **list) {
     DEFINE1(tmp);
     *tmp = (*list)->car;
     print(eval(root, env, tmp));
-    printf("\n");
     return Nil;
 }
 
@@ -790,17 +864,39 @@ static Obj *prim_eq(void *root, Obj **env, Obj **list) {
     return values->car == values->cdr->car ? True : Nil;
 }
 
-static void add_primitive(void *root, Obj **env, char *name, Primitive *fn) {
+void add_primitive(void *root, Obj **env, const char *name, Primitive *fn) {
     DEFINE2(sym, prim);
     *sym = intern(root, name);
     *prim = make_primitive(root, fn);
     add_variable(root, env, sym, prim);
 }
 
-void define_constants(void *root, Obj **env) {
+static void add_constant(void *root, Obj **env, const char *name, Obj **val) {
     DEFINE1(sym);
-    *sym = intern(root, "t");
-    add_variable(root, env, sym, &True);
+    *sym = intern(root, name);
+    (*sym)->constant = true;
+    add_variable(root, env, sym, val);
+}
+
+void add_constant_int(void *root, Obj **env, const char *name, int value) {
+    DEFINE1(val);
+    *val = make_int(root, value);
+    add_constant(root, env, name, val);
+}
+
+Obj *get_variable(void *root, Obj **env, const char *name) {
+    DEFINE2(sym, bind);
+    *sym = intern(root, name);
+    *bind = find(env, *sym);
+    if (!*bind)
+        error("Unbound variable %s", name);
+
+    return (*bind)->cdr;
+}
+
+void define_constants(void *root, Obj **env) {
+    add_constant(root, env, "#t", &True);
+    add_constant_int(root, env, "#itr", 0);
 }
 
 void define_primitives(void *root, Obj **env) {
@@ -823,7 +919,7 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "if", prim_if);
     add_primitive(root, env, "=", prim_num_eq);
     add_primitive(root, env, "eq", prim_eq);
-    add_primitive(root, env, "println", prim_println);
+    add_primitive(root, env, "print", prim_print);
 }
 
 //======================================================================
@@ -831,7 +927,74 @@ void define_primitives(void *root, Obj **env) {
 //======================================================================
 
 // Returns true if the environment variable is defined and not the empty string.
-bool getEnvFlag(char *name) {
+bool getEnvFlag(const char *name) {
     char *val = getenv(name);
     return val && val[0];
+}
+
+void lisp_create(size_t size)
+{
+    if (memory == NULL)
+    {
+        MEMORY_SIZE = size;
+        memory = alloc_semispace();
+        Symbols = Nil;
+    }
+}
+
+void lisp_destroy(void)
+{
+    if (memory != NULL)
+    {
+        free(memory);
+        memory = NULL;
+        from_space = NULL;
+        gc_running = false;
+        mem_nused = 0;
+        current_index = 0;
+    }
+}
+
+bool lisp_is_created()
+{
+    return memory != NULL;
+}
+
+bool lisp_eval(void *root, Obj **env, const char *code)
+{
+    current_buffer = code;
+    current_index = 0;
+
+    DEFINE1(expr);
+    while (true)
+    {
+        if (setjmp(error_jumper) == 0)
+        {
+            *expr = read_expr(root);
+            if (!*expr)
+                return true;
+            if (*expr == Cparen)
+                error("Stray close parenthesis");
+            if (*expr == Dot)
+                error("Stray dot");
+            print(eval(root, env, expr));
+        }
+        else
+            return false;
+    }
+}
+
+void lisp_set_cycle_yield(yield_def yield)
+{
+    cycle_yield = yield;
+}
+
+void lisp_set_printers(print_def out, print_def err)
+{
+    print_out = out;
+    print_err = err;
+}
+
+size_t lisp_mem_used(void) {
+    return mem_nused;
 }

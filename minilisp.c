@@ -1,32 +1,44 @@
-// This software is in the public domain.
 #include "libminilisp.h"
 
-int main(int argc, char **argv) {
-    // Debug flags
-    debug_gc = getEnvFlag("MINILISP_DEBUG_GC");
-    always_gc = getEnvFlag("MINILISP_ALWAYS_GC");
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_RESET "\x1b[0m"
 
-    // Memory allocation
-    memory = alloc_semispace();
+void *env_constructor[3];
+void *root = NULL;
+Obj **genv;
 
-    // Constants and primitives
-    Symbols = Nil;
-    void *root = NULL;
-    DEFINE2(env, expr);
-    *env = make_env(root, &Nil, &Nil);
-    define_constants(root, env);
-    define_primitives(root, env);
+void printOut(const char *msg, int size)
+{
+    printf(ANSI_COLOR_GREEN);
+    printf("%s\n", msg);
+    printf(ANSI_COLOR_RESET);
+}
 
-    // The main loop
-    for (;;) {
-        *expr = read_expr(root);
-        if (!*expr)
-            return 0;
-        if (*expr == Cparen)
-            error("Stray close parenthesis");
-        if (*expr == Dot)
-            error("Stray dot");
-        print(eval(root, env, expr));
-        printf("\n");
-    }
+void printErr(const char *msg, int size)
+{
+    printf(ANSI_COLOR_RED);
+    printf("%s\n", msg);
+    printf(ANSI_COLOR_RESET);
+}
+
+int main()
+{
+    lisp_set_printers(printOut, printErr);
+
+    env_constructor[0] = root;
+    env_constructor[1] = NULL;
+    env_constructor[2] = ROOT_END;
+    root = env_constructor;
+    genv = (Obj **)(env_constructor + 1);
+
+    lisp_create(4000);
+
+    *genv = make_env(root, &Nil, &Nil);
+    define_constants(root, genv);
+    define_primitives(root, genv);
+
+    lisp_eval(root, genv, "(+ 1 2) (^ 1 2)");
+
+    return 0;
 }
