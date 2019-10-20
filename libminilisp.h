@@ -151,7 +151,13 @@ Obj *read_expr(void *root);
 
 Obj *eval(void *root, Obj **env, Obj **obj);
 
+Obj *eval_list(void *root, Obj **env, Obj **list);
+
 struct Obj *make_env(void *root, Obj **vars, Obj **up);
+
+int length(Obj *list);
+
+void __attribute((noreturn)) error(const char *fmt, ...);
 
 void define_constants(void *root, Obj **env);
 
@@ -162,6 +168,8 @@ int print_to_buf(char *buf, int pos, Obj *obj);
 void print(Obj *obj);
 
 void add_primitive(void *root, Obj **env, const char *name, Primitive *fn);
+
+void add_constant(void *root, Obj **env, const char *name, Obj **val);
 
 void add_constant_int(void *root, Obj **env, const char *name, int value);
 
@@ -174,6 +182,8 @@ void lisp_destroy(void);
 bool lisp_is_created();
 
 bool lisp_eval(void *root, Obj **env, const char *code);
+
+bool safe_eval(void *root, Obj **env, Obj **expr);
 
 void lisp_set_cycle_yield(yield_def yield);
 

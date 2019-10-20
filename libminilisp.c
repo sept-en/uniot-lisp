@@ -58,7 +58,7 @@ static void printf_error_to_handler(const char *fmt, va_list ap)
 }
 // TODO: --------------------------------------------------------------------
 
-static void __attribute((noreturn)) error(const char *fmt, ...) {
+void __attribute((noreturn)) error(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     printf_error_to_handler(fmt, ap);
@@ -496,7 +496,7 @@ void print(Obj *obj) {
 }
 
 // Returns the length of the given list. -1 if it's not a proper list.
-static int length(Obj *list) {
+int length(Obj *list) {
     int len = 0;
     for (; list->type == TCELL; list = list->cdr)
         len++;
@@ -541,7 +541,7 @@ static Obj *progn(void *root, Obj **env, Obj **list) {
 }
 
 // Evaluates all the list elements and returns their return values as a new list.
-static Obj *eval_list(void *root, Obj **env, Obj **list) {
+Obj *eval_list(void *root, Obj **env, Obj **list) {
     DEFINE4(head, lp, expr, result);
     *head = Nil;
     for (lp = list; *lp != Nil; *lp = (*lp)->cdr) {
@@ -708,11 +708,11 @@ static Obj *prim_while(void *root, Obj **env, Obj **list) {
     DEFINE3(cond, exprs, itr);
     *cond = (*list)->car;
     *itr = get_variable(root, env, "#itr");
-    (*itr)->value = 0;
+    (*itr)->cdr->value = 0;
     while (eval(root, env, cond) != Nil) {
         *exprs = (*list)->cdr;
         eval_list(root, env, exprs);
-        (*itr)->value++;
+        (*itr)->cdr->value++;
 
         if (cycle_yield)
             cycle_yield();
@@ -757,7 +757,7 @@ static Obj *prim_minus(void *root, Obj **env, Obj **list) {
 static Obj *prim_lt(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list);
     if (length(args) != 2)
-        error("malformed <");
+        error("Malformed <");
     Obj *x = args->car;
     Obj *y = args->cdr->car;
     if (x->type != TINT || y->type != TINT)
@@ -896,7 +896,7 @@ void add_primitive(void *root, Obj **env, const char *name, Primitive *fn) {
     add_variable(root, env, sym, prim);
 }
 
-static void add_constant(void *root, Obj **env, const char *name, Obj **val) {
+void add_constant(void *root, Obj **env, const char *name, Obj **val) {
     DEFINE1(sym);
     *sym = intern(root, name);
     (*sym)->constant = true;
@@ -916,7 +916,7 @@ Obj *get_variable(void *root, Obj **env, const char *name) {
     if (!*bind)
         error("Unbound variable %s", name);
 
-    return (*bind)->cdr;
+    return *bind;
 }
 
 void define_constants(void *root, Obj **env) {
@@ -1005,6 +1005,18 @@ bool lisp_eval(void *root, Obj **env, const char *code)
         else
             return false;
     }
+}
+
+bool safe_eval(void *root, Obj **env, Obj **expr)
+{
+    if (setjmp(error_jumper) == 0)
+    {
+        char buf[SYMBOL_MAX_LEN];
+        print_to_buf(buf, 0, eval(root, env, expr));
+        printf_to_handler(NULL, 0, buf);
+        return true;
+    }
+    return false;
 }
 
 void lisp_set_cycle_yield(yield_def yield)
