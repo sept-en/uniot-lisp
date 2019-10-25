@@ -40,7 +40,19 @@ int main()
 
     // lisp_eval(root, genv, "(define a 5) (setq a 1) (print #itr) (print #t) (setq #itr 1)");
     // lisp_eval(root, genv, "(print #itr) (while (< #itr 10) (print #itr)) (print #itr)");
-    lisp_eval(root, genv, "(define code '(+ 1 2)) (eval '(+ 2 2)) (eval code) (print code) (+ 5 6)");
+    // lisp_eval(root, genv, "(define code '(+ 1 2)) (eval '(+ 2 2)) (eval code) (print code) (+ 5 6)");
+    // lisp_eval(root, genv, "(defun odd (n) (= 1 (% n 2))) (odd 1) (odd 2)");
+    // lisp_eval(root, genv, "(list (list 1 2) (+ 2 3))");
+    // lisp_eval(root, genv, "(/ 0 100)");
+
+    char buf[200];
+    do
+    {
+        char *str = strchr(fgets(buf, sizeof(buf), stdin), '\n');
+        if (str != NULL)
+            *str = '\0';
+        lisp_eval(root, genv, buf);
+    } while (strlen(buf));
 
     lisp_destroy();
 
