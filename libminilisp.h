@@ -153,6 +153,8 @@ Obj *eval(void *root, Obj **env, Obj **obj);
 
 Obj *eval_list(void *root, Obj **env, Obj **list);
 
+Obj *make_int(void *root, int value);
+
 struct Obj *make_env(void *root, Obj **vars, Obj **up);
 
 int length(Obj *list);
