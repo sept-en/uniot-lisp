@@ -1,30 +1,31 @@
 #include "libminilisp.h"
-
-#define ANSI_COLOR_RED "\x1b[31m"
-#define ANSI_COLOR_GREEN "\x1b[32m"
-#define ANSI_COLOR_RESET "\x1b[0m"
+#include "emscripten.h"
 
 void *env_constructor[3];
 void *root = NULL;
 Obj **genv;
 
+char *out_buf_ptr = NULL;
+int out_buf_idx = 0;
+
 void printOut(const char *msg, int size)
 {
-    printf(ANSI_COLOR_GREEN);
-    printf("%s\n", msg);
-    printf(ANSI_COLOR_RESET);
+    memcpy(out_buf_ptr + out_buf_idx, msg, size);
+    memcpy(out_buf_ptr + out_buf_idx + size, "\n", 1);
+    out_buf_idx += size + 1;
 }
 
-void printErr(const char *msg, int size)
+EMSCRIPTEN_KEEPALIVE
+int version()
 {
-    printf(ANSI_COLOR_RED);
-    printf("%s\n", msg);
-    printf(ANSI_COLOR_RESET);
+    return 1;
 }
 
-int main()
+EMSCRIPTEN_KEEPALIVE
+int lisp_evaluate(const char* input, char* output)
 {
-    lisp_set_printers(printOut, printErr);
+    lisp_set_printers(printOut, printOut);
+    out_buf_ptr = output;
 
     env_constructor[0] = root;
     env_constructor[1] = NULL;
@@ -38,23 +39,10 @@ int main()
     define_constants(root, genv);
     define_primitives(root, genv);
 
-    // lisp_eval(root, genv, "(define a 5) (setq a 1) (print #itr) (print #t) (setq #itr 1)");
-    // lisp_eval(root, genv, "(print #itr) (while (< #itr 10) (print #itr)) (print #itr)");
-    // lisp_eval(root, genv, "(define code '(+ 1 2)) (eval '(+ 2 2)) (eval code) (print code) (+ 5 6)");
-    // lisp_eval(root, genv, "(defun odd (n) (= 1 (% n 2))) (odd 1) (odd 2)");
-    // lisp_eval(root, genv, "(list (list 1 2) (+ 2 3))");
-    // lisp_eval(root, genv, "(/ 0 100)");
-
-    char buf[200];
-    do
-    {
-        char *str = strchr(fgets(buf, sizeof(buf), stdin), '\n');
-        if (str != NULL)
-            *str = '\0';
-        lisp_eval(root, genv, buf);
-    } while (strlen(buf));
+    bool success = lisp_eval(root, genv, input);
 
     lisp_destroy();
 
-    return 0;
+    int factor = success ? 1 : -1;
+    return out_buf_idx * factor;
 }
