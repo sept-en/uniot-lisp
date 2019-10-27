@@ -3,17 +3,17 @@
 function fail() {
   echo -n -e '\e[1;31m[ERROR]\e[0m '
   echo "$1"
-  exit 1
+  # exit 1
 }
 
 function do_run() {
-  error=$(echo "$3" | ./minilisp 2>&1 > /dev/null)
+  error=$(echo "$3" | ./repl 2>&1 > /dev/null)
   if [ -n "$error" ]; then
     echo FAILED
     fail "$error"
   fi
 
-  result=$(echo "$3" | ./minilisp 2> /dev/null | tail -1)
+  result=$(echo "$3" | ./repl 2> /dev/null | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g" | tail -1)
   if [ "$result" != "$2" ]; then
     echo FAILED
     fail "$2 expected, but got $result"
@@ -43,7 +43,7 @@ run 'unary -' -3 '(- 3)'
 run '-' -2 '(- 3 5)'
 run '-' -9 '(- 3 5 7)'
 
-run '<' t '(< 2 3)'
+run '<' \#t '(< 2 3)'
 run '<' '()' '(< 3 3)'
 run '<' '()' '(< 4 3)'
 
@@ -67,7 +67,6 @@ run comment 5 "
 # Global variables
 run define 7 '(define x 7) x'
 run define 10 '(define x 7) (+ x 3)'
-run define 7 '(define + 7) +'
 run setq 11 '(define x 7) (setq x 11) x'
 run setq 17 '(setq + 17) +'
 
@@ -81,12 +80,12 @@ run if b "(if () 'a 'b)"
 run if c "(if () 'a 'b 'c)"
 
 # Numeric comparisons
-run = t '(= 3 3)'
+run = \#t '(= 3 3)'
 run = '()' '(= 3 2)'
 
 # eq
-run eq t "(eq 'foo 'foo)"
-run eq t "(eq + +)"
+run eq \#t "(eq 'foo 'foo)"
+run eq \#t "(eq + +)"
 run eq '()' "(eq 'foo 'bar)"
 run eq '()' "(eq + 'bar)"
 
@@ -94,11 +93,11 @@ run eq '()' "(eq + 'bar)"
 run gensym G__0 '(gensym)'
 run gensym '()' "(eq (gensym) 'G__0)"
 run gensym '()' '(eq (gensym) (gensym))'
-run gensym t '((lambda (x) (eq x x)) (gensym))'
+run gensym \#t '((lambda (x) (eq x x)) (gensym))'
 
 # Functions
 run lambda '<function>' '(lambda (x) x)'
-run lambda t '((lambda () t))'
+run lambda \#t '((lambda () #t))'
 run lambda 9 '((lambda (x) (+ x x x)) 3)'
 run defun 12 '(defun double (x) (+ x x)) (double 6)'
 
@@ -112,10 +111,7 @@ run closure 3 '(defun call (f) ((lambda (var) (f)) 5))
   ((lambda (var) (call (lambda () var))) 3)'
 
 run counter 3 '
-  (define counter
-    ((lambda (val)
-       (lambda () (setq val (+ val 1)) val))
-     0))
+  (define counter ((lambda (val) (lambda () (setq val (+ val 1)) val)) 0))
   (counter)
   (counter)
   (counter)'
@@ -124,22 +120,20 @@ run counter 3 '
 run while 45 "
   (define i 0)
   (define sum 0)
-  (while (< i 10)
-    (setq sum (+ sum i))
-    (setq i (+ i 1)))
+  (while (< i 10) (setq sum (+ sum i)) (setq i (+ i 1)))
   sum"
 
 # Macros
 run macro 42 "
-  (defun list (x . y) (cons x y))
-  (defmacro if-zero (x then) (list 'if (list '= x 0) then))
+  (defun lst (x . y) (cons x y))
+  (defmacro if-zero (x then) (lst 'if (lst '= x 0) then))
   (if-zero 0 42)"
 
 run macro 7 '(defmacro seven () 7) ((lambda () (seven)))'
 
 run macroexpand '(if (= x 0) (print x))' "
-  (defun list (x . y) (cons x y))
-  (defmacro if-zero (x then) (list 'if (list '= x 0) then))
+  (defun lst (x . y) (cons x y))
+  (defmacro if-zero (x then) (lst 'if (lst '= x 0) then))
   (macroexpand (if-zero x (print x)))"
 
 

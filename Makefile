@@ -1,15 +1,21 @@
-CFLAGS=-std=gnu99 -g -O2 -Wall
+CFLAGS=-std=gnu99 -g -O2 -Wall -I src
 
 .PHONY: clean test
 
-minilisp: libminilisp.c minilisp.c
+repl: src/libminilisp.c repl.c
 
 clean:
-	rm -f minilisp *~
 	rm -f build/*
 
-test: minilisp
+test: repl
 	@./test.sh
 
 wasm:
-	emcc -O3 -s WASM=1 -s EXPORTED_FUNCTIONS='["_malloc", "_free"]' -s EXTRA_EXPORTED_RUNTIME_METHODS='["cwrap"]' -s ABORTING_MALLOC=0 minilisp.c libminilisp.c -o build/unlisp.js
+	emcc -O3 \
+		-I src \
+		-s WASM=1 \
+		-s EXPORTED_FUNCTIONS='["_malloc", "_free"]' \
+		-s EXTRA_EXPORTED_RUNTIME_METHODS='["cwrap"]' \
+		-s ABORTING_MALLOC=0 \
+		src/libminilisp.c wasm.c \
+		-o build/unlisp.js
