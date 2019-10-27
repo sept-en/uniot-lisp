@@ -127,10 +127,6 @@ typedef struct Obj
 typedef void (*yield_def)();
 typedef void (*print_def)(const char *msg, int size);
 
-extern yield_def cycle_yield;
-extern print_def print_out;
-extern print_def print_err;
-
 // Constants
 extern Obj *True;
 extern Obj *Nil;
@@ -192,5 +188,7 @@ void lisp_set_cycle_yield(yield_def yield);
 void lisp_set_printers(print_def out, print_def err);
 
 size_t lisp_mem_used(void);
+
+int lisp_error_idx(void);
 
 #endif

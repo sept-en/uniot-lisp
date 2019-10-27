@@ -34,6 +34,7 @@ Module.onRuntimeInitialized = async _ => {
     
     console.log(`Script: ${script}`)
     console.log(`Result:\n${result}`)
+    console.log(JSON.parse(result))
     error && console.error('^^^ ERROR OCCURRED!')
 
     Module._free(input_ptr)

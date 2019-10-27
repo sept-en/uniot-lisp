@@ -4,9 +4,9 @@
 // TODO: add comments ------------------------------------------------------
 size_t MEMORY_SIZE = 4000; // default value
 
-yield_def cycle_yield = NULL;
-print_def print_out = NULL;
-print_def print_err = NULL;
+static yield_def cycle_yield = NULL;
+static print_def print_out = NULL;
+static print_def print_err = NULL;
 
 static jmp_buf error_jumper;
 
@@ -1073,4 +1073,9 @@ void lisp_set_printers(print_def out, print_def err)
 
 size_t lisp_mem_used(void) {
     return mem_nused;
+}
+
+int lisp_error_idx(void)
+{
+    return current_index;
 }

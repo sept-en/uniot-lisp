@@ -5,14 +5,35 @@ void *env_constructor[3];
 void *root = NULL;
 Obj **genv;
 
-char *out_buf_ptr = NULL;
-int out_buf_idx = 0;
+const char json_mask_result[] = "{ \"out\": %s, \"err\": %s }";
+const char json_mask_err[] = "{ \"msg\": \"%s\", \"idx\": %d }";
 
-void printOut(const char *msg, int size)
+char *result_buf_ptr = NULL;
+int result_buf_idx = 0;
+
+char json_buf_out[1024] = {0};
+int json_buf_out_idx = 0;
+
+char json_buf_err[256] = "null";
+int json_buf_err_idx = 0;
+
+static inline void mempush(char *buf, int *ptr, const char *value, int size)
 {
-    memcpy(out_buf_ptr + out_buf_idx, msg, size);
-    memcpy(out_buf_ptr + out_buf_idx + size, "\n", 1);
-    out_buf_idx += size + 1;
+    memcpy(buf + *ptr, value, size);
+    *ptr += size;
+}
+
+void print_out(const char *msg, int size)
+{
+    mempush(json_buf_out, &json_buf_out_idx, "\"", 1);
+    mempush(json_buf_out, &json_buf_out_idx, msg, size);
+    mempush(json_buf_out, &json_buf_out_idx, "\"", 1);
+    mempush(json_buf_out, &json_buf_out_idx, ",", 1);
+}
+
+void print_err(const char *msg, int size)
+{
+    sprintf(json_buf_err, json_mask_err, msg, lisp_error_idx());
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -24,8 +45,8 @@ int version()
 EMSCRIPTEN_KEEPALIVE
 int lisp_evaluate(const char* input, char* output)
 {
-    lisp_set_printers(printOut, printOut);
-    out_buf_ptr = output;
+    lisp_set_printers(print_out, print_err);
+    result_buf_ptr = output;
 
     env_constructor[0] = root;
     env_constructor[1] = NULL;
@@ -39,10 +60,16 @@ int lisp_evaluate(const char* input, char* output)
     define_constants(root, genv);
     define_primitives(root, genv);
 
+    mempush(json_buf_out, &json_buf_out_idx, "[", 1);
     bool success = lisp_eval(root, genv, input);
+    json_buf_out_idx--; // to replace last comma in the array
+    mempush(json_buf_out, &json_buf_out_idx, "]", 1);
 
     lisp_destroy();
 
+    memcpy(result_buf_ptr, json_buf_out, json_buf_out_idx);
+    result_buf_idx = sprintf(result_buf_ptr, json_mask_result, json_buf_out, json_buf_err);
+
     int factor = success ? 1 : -1;
-    return out_buf_idx * factor;
+    return result_buf_idx * factor;
 }
