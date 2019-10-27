@@ -2,6 +2,12 @@ CFLAGS=-std=gnu99 -g -O2 -Wall -I src
 
 .PHONY: clean test
 
+env: 
+	$(info RUN THIS COMMAND:)
+	$(info )
+	$(info source ./emsdk/emsdk_env.sh --build=Release)
+	$(info )
+
 repl: src/libminilisp.c repl.c
 
 clean:
