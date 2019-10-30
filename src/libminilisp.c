@@ -713,6 +713,7 @@ static Obj *prim_while(void *root, Obj **env, Obj **list) {
         *exprs = (*list)->cdr;
         eval_list(root, env, exprs);
         (*itr)->cdr->value++;
+        // TODO: disallow endless loops
 
         if (cycle_yield)
             cycle_yield();

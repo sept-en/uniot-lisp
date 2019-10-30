@@ -1,36 +1,31 @@
-<script src="./build/unlisp.js"></script>
+<script src="./build/unlisp-local.js"></script>
 <script>
-
-function setString (ptr, str) {
-    const view = new TextEncoder("utf-8").encode(str)
-    Module.HEAP8.set(view, ptr);
-}
-
-function getString (ptr, size) {
-    const view = Module.HEAPU8.subarray(ptr, ptr + size);
-    return new TextDecoder("utf-8").decode(view)
-}
 
 Module.onRuntimeInitialized = async _ => {
     const api = {
         version: Module.cwrap('version', 'number', []),
-        lisp_evaluate: Module.cwrap('lisp_evaluate', 'number', ['number']),
+        lisp_evaluate: Module.cwrap('lisp_evaluate', 'number', ['number', 'number', 'number'])
     }
 
     console.log(`Uniot lisp version: ${api.version()}`)
 
-    const input_ptr = Module._malloc(1024);
-    const output_ptr = Module._malloc(1024);
+    const input_ptr = Module._malloc(1024)
+    const output_ptr = Module._malloc(1024)
 
     let error = false
-    const script = '(+ 1 1) (+ 1 2) (+ 1 3) ?'
-    setString(input_ptr, script)
-    let output_size = api.lisp_evaluate(input_ptr, output_ptr)
+    const script =
+        '(defun odds (n) (= 1 (% n 2)))\n' +
+        '(defun colors (n) (% n 3))\n' +
+        '(defun odd (n) (= 1 (% n 2)))\n' +
+        '(1 2 3) (color 4)\n' +
+        '(defun color (n) (% n 3))\n'
+    Module.writeAsciiToMemory(script, input_ptr, false)
+    let output_size = api.lisp_evaluate(4000, input_ptr, output_ptr)
     if (output_size < 0) {
         error = true
         output_size *= -1
     }
-    const result = getString(output_ptr, output_size)
+    const result = Module.AsciiToString(output_ptr)
     
     console.log(`Script: ${script}`)
     console.log(`Result:\n${result}`)
