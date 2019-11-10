@@ -40,6 +40,7 @@ int main()
   // lisp_eval(root, genv, "(defun odd (n) (= 1 (% n 2))) (odd 1) (odd 2)");
   // lisp_eval(root, genv, "(list (list 1 2) (+ 2 3))");
   // lisp_eval(root, genv, "(/ 0 100)");
+  // lisp_eval(root, genv, "(while (< #itr 15) (while (< #itr 10) (print #itr)))");
 
   char buf[200];
   char *str = NULL;

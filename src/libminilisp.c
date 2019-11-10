@@ -4,6 +4,8 @@
 // TODO: add comments ------------------------------------------------------
 size_t MEMORY_SIZE = 4000; // default value
 
+static bool cycle_in_progress = false;
+
 static yield_def cycle_yield = NULL;
 static print_def print_out = NULL;
 static print_def print_err = NULL;
@@ -59,6 +61,8 @@ static void printf_error_to_handler(const char *fmt, va_list ap)
 // TODO: --------------------------------------------------------------------
 
 void __attribute((noreturn)) error(const char *fmt, ...) {
+    cycle_in_progress = false;
+
     va_list ap;
     va_start(ap, fmt);
     printf_error_to_handler(fmt, ap);
@@ -703,8 +707,11 @@ static Obj *prim_setcar(void *root, Obj **env, Obj **list) {
 
 // (while cond expr ...)
 static Obj *prim_while(void *root, Obj **env, Obj **list) {
+    if (cycle_in_progress)
+        error("Nested loops are prohibited");
     if (length(*list) < 2)
         error("Malformed while");
+    cycle_in_progress = true;
     DEFINE3(cond, exprs, itr);
     *cond = (*list)->car;
     *itr = get_variable(root, env, "#itr");
@@ -718,6 +725,7 @@ static Obj *prim_while(void *root, Obj **env, Obj **list) {
         if (cycle_yield)
             cycle_yield();
     }
+    cycle_in_progress = false;
     return Nil;
 }
 
@@ -988,6 +996,10 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "print", prim_print);
     add_primitive(root, env, "eval", prim_eval);
     add_primitive(root, env, "list", prim_list);
+    // TODO: add NOT primitive: (! expr)
+    // TODO: add ABS primitive: (abs <integer>)
+    // TODO: add AND primitive: (&& expr expr ...)
+    // TODO: add OR primitive: (|| expr expr ...)
 }
 
 //======================================================================
