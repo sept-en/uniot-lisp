@@ -42,6 +42,11 @@ int main()
   // lisp_eval(root, genv, "(/ 0 100)");
   // lisp_eval(root, genv, "(while (< #itr 15) (while (< #itr 10) (print #itr)))");
 
+  // (defun a () (list (while (< #itr 10) (print #itr)) (+ 1 1)))
+  // (defun a () (while (< #itr 10) (print #itr)) (+ 1 1))
+  // (defun a (x) (print x) (print (+ x 1)) (list x x x))
+  // ((lambda (l x) (while (< #itr x) (setq l (cdr l)) (print l))) (list 1 2 3 4 5) 3)
+
   char buf[200];
   char *str = NULL;
   while (NULL != (str = fgets(buf, sizeof(buf), stdin)))

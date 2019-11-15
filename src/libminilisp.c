@@ -1000,6 +1000,9 @@ void define_primitives(void *root, Obj **env) {
     // TODO: add ABS primitive: (abs <integer>)
     // TODO: add AND primitive: (&& expr expr ...)
     // TODO: add OR primitive: (|| expr expr ...)
+    // TODO: add LTE primitive: (<= expr expr ...)
+    // TODO: add GT primitive: (> expr expr ...)
+    // TODO: add GTE primitive: (>= expr expr ...)
 }
 
 //======================================================================
