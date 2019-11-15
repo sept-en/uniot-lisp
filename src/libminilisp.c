@@ -800,11 +800,27 @@ static Obj *prim_lt(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list);
     if (length(args) != 2)
         error("Malformed <");
+
     Obj *x = args->car;
     Obj *y = args->cdr->car;
     if (x->type != TINT || y->type != TINT)
         error("< takes only numbers");
+
     return x->value < y->value ? True : Nil;
+}
+
+// (> <integer> <integer>)
+static Obj *prim_gt(void *root, Obj **env, Obj **list) {
+    Obj *args = eval_list(root, env, list);
+    if (length(args) != 2)
+        error("Malformed >");
+
+    Obj *x = args->car;
+    Obj *y = args->cdr->car;
+    if (x->type != TINT || y->type != TINT)
+        error("> takes only numbers");
+
+    return x->value > y->value ? True : Nil;
 }
 
 static Obj *handle_function(void *root, Obj **env, Obj **list, int type) {
@@ -916,6 +932,73 @@ static Obj *prim_if(void *root, Obj **env, Obj **list) {
     return *els == Nil ? Nil : progn(root, env, els);
 }
 
+// (! expr)
+// (not expr)
+static Obj *prim_not(void *root, Obj **env, Obj **list) {
+    if (length(*list) != 1)
+        error("Malformed not");
+
+    Obj *arg = eval_list(root, env, list)->car;
+    if (arg->type == TTRUE)
+        return Nil;
+    if (arg->type == TNIL)
+        return True;
+
+    const bool val = (bool)arg->value;
+    return val ? Nil : True;
+}
+
+// (abs <integer>)
+static Obj *prim_abs(void *root, Obj **env, Obj **list) {
+    if (length(*list) != 1)
+        error("Malformed not");
+
+    Obj *arg = eval_list(root, env, list)->car;
+    if (arg->type != TINT)
+        error("abs takes only numbers");
+
+    const int ret = arg->value < 0 ? -arg->value : arg->value;
+    return make_int(root, ret);
+}
+
+// (and expr expr ..)
+// (&& expr expr ..)
+static Obj *prim_and(void *root, Obj **env, Obj **list) {
+    if (length(*list) < 2)
+        error("Malformed and");
+
+    for (Obj *args = eval_list(root, env, list); args != Nil; args = args->cdr) {
+        printf("Check-");
+        if (args->car->type == TNIL)
+            return Nil;
+        if (args->car->type == TTRUE)
+            continue;
+        if (! (bool)args->car->value)
+            return Nil;
+    }
+
+    return True;
+}
+
+// (or expr expr ..)
+// (|| expr expr ..)
+static Obj *prim_or(void *root, Obj **env, Obj **list) {
+    if (length(*list) < 2)
+        error("Malformed or");
+
+    bool current_res = false;
+    for (Obj *args = eval_list(root, env, list); args != Nil; args = args->cdr) {
+        if (args->car->type == TNIL)
+            current_res = current_res || false;
+        if (args->car->type == TTRUE)
+            current_res = current_res || true;
+        else
+            current_res = current_res || (bool)args->car->value;
+    }
+
+    return current_res ? True : Nil;
+}
+
 // (= <integer> <integer>)
 static Obj *prim_num_eq(void *root, Obj **env, Obj **list) {
     if (length(*list) != 2)
@@ -924,7 +1007,7 @@ static Obj *prim_num_eq(void *root, Obj **env, Obj **list) {
     Obj *x = values->car;
     Obj *y = values->cdr->car;
     if (x->type != TINT || y->type != TINT)
-        error("= only takes numbers");
+        error("= takes only numbers");
     return x->value == y->value ? True : Nil;
 }
 
@@ -985,6 +1068,7 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "/", prim_div);
     add_primitive(root, env, "%", prim_modulo);
     add_primitive(root, env, "<", prim_lt);
+    add_primitive(root, env, ">", prim_gt);
     add_primitive(root, env, "define", prim_define);
     add_primitive(root, env, "defun", prim_defun);
     add_primitive(root, env, "defmacro", prim_defmacro);
@@ -993,16 +1077,19 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "if", prim_if);
     add_primitive(root, env, "=", prim_num_eq);
     add_primitive(root, env, "eq", prim_eq);
+    add_primitive(root, env, "abs", prim_abs);
     add_primitive(root, env, "print", prim_print);
     add_primitive(root, env, "eval", prim_eval);
     add_primitive(root, env, "list", prim_list);
-    // TODO: add NOT primitive: (! expr)
-    // TODO: add ABS primitive: (abs <integer>)
-    // TODO: add AND primitive: (&& expr expr ...)
-    // TODO: add OR primitive: (|| expr expr ...)
-    // TODO: add LTE primitive: (<= expr expr ...)
-    // TODO: add GT primitive: (> expr expr ...)
-    // TODO: add GTE primitive: (>= expr expr ...)
+    add_primitive(root, env, "not", prim_not);
+    add_primitive(root, env, "!", prim_not);
+    add_primitive(root, env, "and", prim_and);
+    add_primitive(root, env, "&&", prim_and);
+    add_primitive(root, env, "or", prim_or);
+    add_primitive(root, env, "||", prim_or);
+    // TODO: add LTE primitive: (<= <integer> <integer>...)
+    // TODO: add GT primitive: (> <integer> <integer> ...)
+    // TODO: add GTE primitive: (>= <integer> <integer> ...)
 }
 
 //======================================================================
