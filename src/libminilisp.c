@@ -1164,11 +1164,11 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "eval", prim_eval);
     add_primitive(root, env, "list", prim_list);
     add_primitive(root, env, "not", prim_not);
-    add_primitive(root, env, "!", prim_not);
     add_primitive(root, env, "and", prim_and);
-    add_primitive(root, env, "&&", prim_and);
     add_primitive(root, env, "or", prim_or);
-    add_primitive(root, env, "||", prim_or);
+    //add_primitive(root, env, "!", prim_not);
+    //add_primitive(root, env, "&&", prim_and);
+    //add_primitive(root, env, "||", prim_or);
 }
 
 //======================================================================
