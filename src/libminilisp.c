@@ -1,5 +1,6 @@
 #include <setjmp.h>
 #include "libminilisp.h"
+#include "memcheck.h"
 
 // TODO: add comments ------------------------------------------------------
 size_t MEMORY_SIZE = 4000; // default value
@@ -610,6 +611,9 @@ static Obj *macroexpand(void *root, Obj **env, Obj **obj) {
 
 // Evaluates the S expression.
 Obj *eval(void *root, Obj **env, Obj **obj) {
+    if (!is_valid_ptr(*obj))
+        error("Unexpected statement. Evaluation terminated");
+
     switch ((*obj)->type) {
     case TINT:
     case TPRIMITIVE:
