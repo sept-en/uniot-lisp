@@ -47,6 +47,18 @@ run '<' \#t '(< 2 3)'
 run '<' '()' '(< 3 3)'
 run '<' '()' '(< 4 3)'
 
+run '<=' \#t '(<= 2 3)'
+run '<=' \#t '(<= 3 3)'
+run '<=' '()' '(<= 4 3)'
+
+run '>' \#t '(> 3 2)'
+run '>' '()' '(> 3 3)'
+run '>' '()' '(> 3 4)'
+
+run '>=' \#t '(>= 3 2)'
+run '>=' \#t '(>= 3 3)'
+run '>=' '()' '(>= 3 5)'
+
 run 'literal list' '(a b c)' "'(a b c)"
 run 'literal list' '(a b . c)' "'(a b . c)"
 
@@ -79,6 +91,52 @@ run if a "(if 'x 'a 'b)"
 run if b "(if () 'a 'b)"
 run if c "(if () 'a 'b 'c)"
 
+# Logical operations
+run not \#t '(not ())'
+run not '()' '(not #t)'
+run not '()' '(not 3)'
+run not '()' '(not -5)'
+run not \#t '(not 0)'
+run not_symbol \#t '(! ())'
+run not_symbol '()' '(! #t)'
+run not_symbol '()' '(! 3)'
+run not_symbol '()' '(! -5)'
+run not_symbol \#t '(! 0)'
+run and \#t '(and #t #t)'
+run and \#t '(and #t 1)'
+run and \#t '(and #t 1 4)'
+run and '()' '(and #t ())'
+run and '()' '(and () #t)'
+run and '()' '(and () ())'
+run and '()' '(and #t 0)'
+run and '()' '(and #t 1 5 ())'
+run and_symbol \#t '(&& #t #t)'
+run and_symbol \#t '(&& #t 1)'
+run and_symbol \#t '(&& #t 1 4)'
+run and_symbol '()' '(&& #t ())'
+run and_symbol '()' '(&& () #t)'
+run and_symbol '()' '(&& () ())'
+run and_symbol '()' '(&& #t 0)'
+run and_symbol '()' '(&& #t 1 5 ())'
+run or \#t '(or #t #t)'
+run or \#t '(or #t 1)'
+run or \#t '(or #t 1 4)'
+run or \#t '(or #t ())'
+run or \#t '(or () #t)'
+run or '()' '(or () ())'
+run or '()' '(or 0 0)'
+run or \#t '(or #t 0)'
+run or \#t '(or #t 1 5 ())'
+run or_symbol \#t '(|| #t #t)'
+run or_symbol \#t '(|| #t 1)'
+run or_symbol \#t '(|| #t 1 4)'
+run or_symbol \#t '(|| #t ())'
+run or_symbol \#t '(|| () #t)'
+run or_symbol '()' '(|| () ())'
+run or_symbol '()' '(|| 0 0)'
+run or_symbol \#t '(|| #t 0)'
+run or_symbol \#t '(|| #t 1 5 ())'
+
 # Numeric comparisons
 run = \#t '(= 3 3)'
 run = '()' '(= 3 2)'
@@ -88,6 +146,25 @@ run eq \#t "(eq 'foo 'foo)"
 run eq \#t "(eq + +)"
 run eq '()' "(eq 'foo 'bar)"
 run eq '()' "(eq + 'bar)"
+
+# Other arithmetic operations
+run abs 3 '(abs -3)'
+run abs 3 '(abs 3)'
+run abs 0 '(abs 0)'
+run mul 0 '(* 0 2)'
+run mul 0 '(* 3 0)'
+run mul 0 '(* 3 9 0)'
+run mul 1 '(* 1 1)'
+run mul 5 '(* 1 5)'
+run mul 16 '(* 2 8)'
+run mul 60 '(* 2 -3 5 -2)'
+run mul -1 '(* 1 -1)'
+run mul -48 '(* 4 2 -6)'
+# Multiplication overflow
+run mul '-2147483648' '(* 12345 54321 42)'
+run div 1 '(/ 5 5)'
+run div 3 '(/ 6 2)'
+run div -3 '(/ 6 -2)'
 
 # gensym
 run gensym G__0 '(gensym)'
