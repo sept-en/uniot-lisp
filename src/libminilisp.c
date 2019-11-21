@@ -800,6 +800,7 @@ static Obj *prim_div(void *root, Obj **env, Obj **list) {
     return make_int(root, r);
 }
 
+#if defined(FLOATING_POINT_ARITHMETICS)
 static bool float_equal(float a, float b) {
     static const float FLOAT_CMP_PRECISION = 0.00001f;
     return fabs(a - b) < FLOAT_CMP_PRECISION;
@@ -813,6 +814,17 @@ static bool mul_with_overflow_check(float a, float b, float* res) {
     *res = r;
     return true;
 }
+#else
+// Integer version
+static bool mul_with_overflow_check(float a, float b, float* res) {
+    const int r = (int)a * (int)b;
+    if (a != 0 && r / a != b)
+        return false;
+
+    *res = (float)r;
+    return true;
+}
+#endif
 
 // (* <integer> <integer> ...)
 static Obj *prim_mul(void *root, Obj **env, Obj **list) {

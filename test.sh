@@ -160,8 +160,6 @@ run mul 16 '(* 2 8)'
 run mul 60 '(* 2 -3 5 -2)'
 run mul -1 '(* 1 -1)'
 run mul -48 '(* 4 2 -6)'
-# Multiplication overflow
-run mul '-2147483648' '(* 12345 54321 42)'
 run div 1 '(/ 5 5)'
 run div 3 '(/ 6 2)'
 run div -3 '(/ 6 -2)'
