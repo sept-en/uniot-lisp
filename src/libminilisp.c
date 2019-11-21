@@ -333,7 +333,7 @@ static Obj *acons(void *root, Obj **x, Obj **y, Obj **a) {
 // This is a hand-written recursive-descendent parser.
 //======================================================================
 
-static const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>";
+static const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>|";
 
 static int peek(void) {
     int c = buffer_getchar();
