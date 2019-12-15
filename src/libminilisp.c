@@ -334,7 +334,7 @@ static Obj *acons(void *root, Obj **x, Obj **y, Obj **a) {
 // This is a hand-written recursive-descendent parser.
 //======================================================================
 
-static const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>|";
+static const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>";
 
 static int peek(void) {
     int c = buffer_getchar();
@@ -804,31 +804,15 @@ static Obj *prim_div(void *root, Obj **env, Obj **list) {
     return make_int(root, r);
 }
 
-#if defined(FLOATING_POINT_ARITHMETICS)
-static bool float_equal(float a, float b) {
-    static const float FLOAT_CMP_PRECISION = 0.00001f;
-    return fabs(a - b) < FLOAT_CMP_PRECISION;
-}
-
-static bool mul_with_overflow_check(float a, float b, float* res) {
-    const float r = a * b;
-    if (a != 0.f && ! float_equal(r / a, b))
+// Integer version
+static bool mul_with_overflow_check(int a, int b, int* res) {
+    const int r = (int)a * (int)b;
+    if (a != 0 && r / a != b)
         return false;
 
     *res = r;
     return true;
 }
-#else
-// Integer version
-static bool mul_with_overflow_check(float a, float b, float* res) {
-    const int r = (int)a * (int)b;
-    if (a != 0 && r / a != b)
-        return false;
-
-    *res = (float)r;
-    return true;
-}
-#endif
 
 // (* <integer> <integer> ...)
 static Obj *prim_mul(void *root, Obj **env, Obj **list) {
@@ -844,11 +828,11 @@ static Obj *prim_mul(void *root, Obj **env, Obj **list) {
     if (args->car->value == 0)
         return make_int(root, 0);
 
-    float r = args->car->value;
+    int r = args->car->value;
     for (Obj *p = args->cdr; p != Nil; p = p->cdr)
     {
         //TODO: add float support in Unilisp
-        const bool is_overflow = ! mul_with_overflow_check(r, (float)p->car->value, &r);
+        const bool is_overflow = ! mul_with_overflow_check(r, p->car->value, &r);
         if (is_overflow)
             error("Multiplication overflow");
     }
@@ -1184,9 +1168,6 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "not", prim_not);
     add_primitive(root, env, "and", prim_and);
     add_primitive(root, env, "or", prim_or);
-    //add_primitive(root, env, "!", prim_not);
-    //add_primitive(root, env, "&&", prim_and);
-    //add_primitive(root, env, "||", prim_or);
 }
 
 //======================================================================
