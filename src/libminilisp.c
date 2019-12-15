@@ -1,6 +1,7 @@
 #include <setjmp.h>
 #include <math.h>
 #include "libminilisp.h"
+#include "memcheck.h"
 
 // TODO: add comments ------------------------------------------------------
 size_t MEMORY_SIZE = 4000; // default value
@@ -611,6 +612,9 @@ static Obj *macroexpand(void *root, Obj **env, Obj **obj) {
 
 // Evaluates the S expression.
 Obj *eval(void *root, Obj **env, Obj **obj) {
+    if (!is_valid_ptr(*obj))
+        error("Unexpected statement. Evaluation terminated");
+
     switch ((*obj)->type) {
     case TINT:
     case TPRIMITIVE:
@@ -667,7 +671,7 @@ static Obj *prim_cons(void *root, Obj **env, Obj **list) {
 // (car <cell>)
 static Obj *prim_car(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list);
-    if (args->car->type != TCELL || args->cdr != Nil)
+    if (length(args) < 1 || args->car->type != TCELL || args->cdr != Nil)
         error("Malformed car");
     return args->car->car;
 }
@@ -675,7 +679,7 @@ static Obj *prim_car(void *root, Obj **env, Obj **list) {
 // (cdr <cell>)
 static Obj *prim_cdr(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list);
-    if (args->car->type != TCELL || args->cdr != Nil)
+    if (length(args) < 1 || args->car->type != TCELL || args->cdr != Nil)
         error("Malformed cdr");
     return args->car->cdr;
 }
@@ -1173,6 +1177,8 @@ void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "eq", prim_eq);
     add_primitive(root, env, "abs", prim_abs);
     add_primitive(root, env, "print", prim_print);
+    // Implemented to reduce code.
+    // Most of these functions can be implemented using previously declared functions.
     add_primitive(root, env, "eval", prim_eval);
     add_primitive(root, env, "list", prim_list);
     add_primitive(root, env, "not", prim_not);

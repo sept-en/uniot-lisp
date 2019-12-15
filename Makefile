@@ -17,6 +17,9 @@ clean:
 test: repl
 	@./test.sh
 
+server:
+	emrun --no_browser --port 8000 .
+
 wasm:
 	emcc -O3 \
 		-I src \
